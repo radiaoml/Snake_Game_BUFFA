@@ -216,6 +216,12 @@ function draw() {
         if (showTutorialOverlay) {
             drawTutorialOverlay();
         }
+    } else if (gameState === GAMEOVER) {
+        // Continue rendering particles during game-over for celebration effect
+        if (particles) {
+            particles.update();
+            particles.display();
+        }
     } else if (gameState === START && menuSnake) {
         updateMainMenu();
     }
@@ -350,6 +356,11 @@ function triggerGameOver() {
     if (score >= levelData.targetScore) {
         completeLevel(currentDifficultyLevel, currentLevel);
         levelCompleted = true;
+        
+        // Trigger particle convergence celebration
+        particles.convergeStar(width / 2, height / 3, color(251, 191, 36), 100);
+        particles.convergeText('LEVEL', width / 2 - 80, height / 2, color(74, 222, 128));
+        particles.convergeText('COMPLETE', width / 2 + 80, height / 2 + 40, color(100, 200, 255));
     }
 
     document.getElementById('final-score').innerText = score;
@@ -406,6 +417,51 @@ class ParticleSystem {
             this.particles.push(new Particle(x, y, c));
         }
     }
+    
+    // Create convergence particles that form text/shapes
+    convergeText(text, targetX, targetY, color) {
+        const particleSize = 8;
+        const spacing = particleSize * 1.5;
+        let startY = targetY - (text.length * spacing) / 2;
+        
+        // Create particles for each character
+        for (let charIdx = 0; charIdx < text.length; charIdx++) {
+            const char = text[charIdx];
+            const charY = startY + charIdx * spacing;
+            
+            // Spawn ~20 particles per character from random screen positions
+            for (let i = 0; i < 20; i++) {
+                const startX = random(width);
+                const startY = random(height);
+                let p = new Particle(startX, startY, color);
+                p.targetX = targetX + (charIdx * 15);
+                p.targetY = charY;
+                p.isConverging = true;
+                p.convergeSpeed = random(0.02, 0.08);
+                this.particles.push(p);
+            }
+        }
+    }
+    
+    // Create particles that form a star shape
+    convergeStar(centerX, centerY, color, numParticles = 80) {
+        for (let i = 0; i < numParticles; i++) {
+            // Random position on screen to start from
+            const startX = random(width);
+            const startY = random(height);
+            let p = new Particle(startX, startY, color);
+            
+            // Calculate star point positions (5-pointed star)
+            const angle = (i / numParticles) * TWO_PI;
+            const distance = (i % 16 < 8) ? 80 : 50; // Alternate points for star shape
+            p.targetX = centerX + cos(angle) * distance;
+            p.targetY = centerY + sin(angle) * distance;
+            p.isConverging = true;
+            p.convergeSpeed = random(0.02, 0.08);
+            this.particles.push(p);
+        }
+    }
+    
     update() {
         for (let i = this.particles.length-1; i >= 0; i--) {
             this.particles[i].update();
@@ -424,16 +480,38 @@ class Particle {
         this.acc = createVector(0, 0);
         this.lifespan = 255;
         this.c = c;
+        
+        // Convergence properties
+        this.isConverging = false;
+        this.targetX = 0;
+        this.targetY = 0;
+        this.convergeSpeed = 0.05;
     }
     update() {
-        this.vel.add(this.acc);
-        this.pos.add(this.vel);
-        this.lifespan -= 10;
+        if (this.isConverging && this.lifespan > 100) {
+            // Move toward target position smoothly
+            let targetPos = createVector(this.targetX, this.targetY);
+            let direction = p5.Vector.sub(targetPos, this.pos);
+            direction.mult(this.convergeSpeed);
+            this.pos.add(direction);
+        } else {
+            // Normal particle behavior (slight drift after convergence)
+            this.vel.add(this.acc);
+            this.pos.add(this.vel);
+        }
+        
+        // Fade out at the end
+        if (this.isConverging && this.lifespan < 100) {
+            // Hold position while fading
+            this.lifespan -= 5;
+        } else {
+            this.lifespan -= 3;
+        }
     }
     display() {
         noStroke();
         fill(this.c.levels[0], this.c.levels[1], this.c.levels[2], this.lifespan);
-        ellipse(this.pos.x, this.pos.y, 4, 4);
+        ellipse(this.pos.x, this.pos.y, 6, 6);
     }
     isDead() { return this.lifespan < 0; }
 }
